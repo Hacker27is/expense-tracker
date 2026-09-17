@@ -1,0 +1,781 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Expenses</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧾</text></svg>">
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f4f3ef;
+  --surface: #fcfcfb;
+  --surface-2: #efeee9;
+  --border: #e2e0d9;
+  --text: #0b0b0b;
+  --text-2: #52514e;
+  --muted: #86847e;
+  --series-1: #2a78d6;
+  --series-1-soft: #cde2fb;
+  --good: #1a7f37;
+  --bad: #c62828;
+  --warn: #9a6700;
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 16px rgba(0,0,0,.04);
+  --radius: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #111110;
+    --surface: #1a1a19;
+    --surface-2: #242422;
+    --border: #2f2f2c;
+    --text: #ffffff;
+    --text-2: #c3c2b7;
+    --muted: #8d8c85;
+    --series-1: #3987e5;
+    --series-1-soft: #1c3a5e;
+    --good: #4ac26b;
+    --bad: #ff6b6b;
+    --warn: #d4a72c;
+    --shadow: none;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.num { font-variant-numeric: tabular-nums; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 20px 20px 60px; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+a { color: var(--series-1); }
+
+/* top bar */
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 20px; }
+.top h1 { font-size: 22px; margin: 0 8px 0 0; letter-spacing: -.01em; }
+.month { display: flex; align-items: center; gap: 2px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 2px; }
+.month button { border: 0; background: none; width: 30px; height: 30px; border-radius: 8px; color: var(--text-2); }
+.month button:hover { background: var(--surface-2); }
+.month select { border: 0; background: none; padding: 4px 6px; font-weight: 600; appearance: none; text-align: center; }
+.spacer { flex: 1; }
+.btn { border: 1px solid var(--border); background: var(--surface); padding: 7px 12px; border-radius: 10px; font-weight: 500; white-space: nowrap; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--series-1); border-color: var(--series-1); color: #fff; }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn:disabled { opacity: .45; cursor: default; filter: none; }
+.btn.danger { color: var(--bad); }
+.btn.ghost { background: none; border-color: transparent; color: var(--text-2); }
+.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); padding: 4px 10px; border-radius: 99px; background: var(--surface); border: 1px solid var(--border); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.dot.ok { background: var(--good); } .dot.bad { background: var(--bad); } .dot.warn { background: var(--warn); }
+
+/* cards */
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px; }
+.card h2 { font-size: 13px; font-weight: 600; color: var(--text-2); margin: 0 0 14px; text-transform: uppercase; letter-spacing: .04em; }
+.grid { display: grid; gap: 14px; }
+.hero { grid-template-columns: 1.4fr 1fr 1fr; margin-bottom: 14px; }
+.hero .label { color: var(--text-2); font-size: 13px; }
+.hero .big { font-size: 34px; font-weight: 700; letter-spacing: -.02em; margin-top: 4px; }
+.hero .mid { font-size: 24px; font-weight: 650; margin-top: 4px; }
+.hero .sub { color: var(--muted); font-size: 12px; margin-top: 6px; }
+.accounts { grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); margin-bottom: 14px; }
+.acc .head { display: flex; align-items: center; gap: 8px; color: var(--text-2); font-weight: 500; }
+.acc .flag { font-size: 20px; }
+.acc .bal { font-size: 24px; font-weight: 650; margin: 8px 0 2px; }
+.acc .bal.neg { color: var(--bad); }
+.acc .meta { color: var(--muted); font-size: 12px; display: flex; justify-content: space-between; gap: 8px; }
+.acc .meta button { border: 0; background: none; color: var(--series-1); padding: 0; font-size: 12px; }
+.charts { grid-template-columns: 1fr 1fr; margin-bottom: 14px; }
+
+/* category bars */
+.cats { display: flex; flex-direction: column; gap: 2px; }
+.cat { display: grid; grid-template-columns: minmax(120px, 40%) 1fr auto; align-items: center; gap: 10px; padding: 6px 8px; margin: 0 -8px; border-radius: 8px; border: 0; background: none; text-align: left; width: calc(100% + 16px); }
+.cat:hover, .cat.on { background: var(--surface-2); }
+.cat .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cat .track { height: 10px; }
+.cat .bar { height: 10px; background: var(--series-1); border-radius: 0 4px 4px 0; min-width: 3px; }
+.cat .val { text-align: right; white-space: nowrap; }
+.cat .pct { color: var(--muted); font-size: 12px; margin-left: 6px; display: inline-block; min-width: 32px; }
+.empty { color: var(--muted); padding: 24px 0; text-align: center; }
+
+/* daily chart */
+.daily { position: relative; }
+.daily svg { display: block; width: 100%; height: 220px; overflow: visible; }
+.daily .grid-line { stroke: var(--border); stroke-width: 1; }
+.daily .axis { fill: var(--muted); font-size: 11px; }
+.daily .b { fill: var(--series-1); }
+.daily .hit { fill: transparent; }
+.daily .hit:hover + .b, .daily g.col:hover .b { filter: brightness(1.15); }
+.tip { position: fixed; pointer-events: none; background: var(--text); color: var(--bg); padding: 6px 10px; border-radius: 8px; font-size: 12px; white-space: nowrap; z-index: 50; transform: translate(-50%, calc(-100% - 10px)); }
+.tip b { font-weight: 650; }
+
+/* transactions */
+.tx-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 10px; }
+.tx-head h2 { margin: 0; }
+.chips { display: flex; gap: 4px; flex-wrap: wrap; }
+.chip { border: 1px solid var(--border); background: none; padding: 4px 10px; border-radius: 99px; font-size: 13px; color: var(--text-2); }
+.chip.on { background: var(--text); color: var(--bg); border-color: var(--text); }
+.search { border: 1px solid var(--border); background: var(--surface); border-radius: 10px; padding: 6px 10px; min-width: 0; width: 200px; }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+td, th { padding: 9px 8px; border-top: 1px solid var(--border); vertical-align: middle; }
+th { text-align: left; font-weight: 500; color: var(--muted); font-size: 12px; border-top: 0; }
+tr.row { cursor: pointer; }
+tr.row:hover td { background: var(--surface-2); }
+.thumb { width: 36px; height: 36px; border-radius: 8px; object-fit: cover; background: var(--surface-2); display: flex; align-items: center; justify-content: center; font-size: 16px; }
+.desc { font-weight: 500; }
+.desc small { display: block; color: var(--muted); font-weight: 400; font-size: 12px; }
+.amt { text-align: right; white-space: nowrap; font-weight: 600; }
+.amt small { display: block; color: var(--muted); font-weight: 400; font-size: 12px; }
+.amt.in { color: var(--good); }
+.amt.tr { color: var(--text-2); }
+.date { color: var(--text-2); white-space: nowrap; }
+.tag { font-size: 12px; color: var(--text-2); white-space: nowrap; }
+.foot { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin-top: 14px; gap: 10px; flex-wrap: wrap; }
+
+/* modal */
+.overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: flex-start; justify-content: center; padding: 6vh 16px; z-index: 40; overflow-y: auto; }
+.modal { background: var(--surface); border-radius: 16px; width: 100%; max-width: 520px; padding: 22px; border: 1px solid var(--border); }
+.modal.wide { max-width: 820px; }
+.modal h3 { margin: 0 0 16px; font-size: 18px; }
+.form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form .full { grid-column: 1 / -1; }
+.field label { display: block; font-size: 12px; color: var(--text-2); margin-bottom: 4px; }
+.field input, .field select, .field textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); }
+.field input:focus, .field select:focus { outline: 2px solid var(--series-1); outline-offset: -1px; border-color: transparent; }
+.hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; flex-wrap: wrap; }
+.actions .left { margin-right: auto; }
+.err { color: var(--bad); font-size: 13px; margin-top: 10px; min-height: 1em; }
+.edit-grid { display: grid; grid-template-columns: 260px 1fr; gap: 18px; }
+.receipt img { width: 100%; border-radius: 10px; border: 1px solid var(--border); cursor: zoom-in; }
+.items { font-size: 12px; color: var(--text-2); margin-top: 10px; max-height: 180px; overflow-y: auto; }
+.items div { display: flex; justify-content: space-between; gap: 10px; padding: 2px 0; border-bottom: 1px dashed var(--border); }
+
+/* setup */
+.setup { max-width: 640px; margin: 4vh auto; }
+.setup h1 { font-size: 26px; margin-bottom: 4px; }
+.setup .lead { color: var(--text-2); margin: 0 0 22px; }
+.step { display: grid; grid-template-columns: 32px 1fr; gap: 14px; margin-bottom: 14px; }
+.step .n { width: 32px; height: 32px; border-radius: 50%; background: var(--surface-2); display: flex; align-items: center; justify-content: center; font-weight: 650; color: var(--text-2); }
+.step.done .n { background: var(--good); color: #fff; }
+.step ol { margin: 6px 0 10px; padding-left: 18px; color: var(--text-2); }
+.step h3 { margin: 4px 0 6px; font-size: 16px; }
+.row-in { display: flex; gap: 8px; }
+.row-in input { flex: 1; }
+.big-link { display: inline-block; margin-top: 8px; padding: 10px 16px; border-radius: 10px; background: var(--series-1); color: #fff; text-decoration: none; font-weight: 600; }
+.acc-editor { display: flex; flex-direction: column; gap: 10px; }
+.acc-list { display: flex; flex-direction: column; gap: 6px; }
+.acc-row { display: grid; grid-template-columns: 26px 1fr auto auto auto; align-items: center; gap: 8px; }
+.acc-row input { padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); min-width: 0; }
+.acc-row .cur { color: var(--text-2); font-size: 12px; }
+.acc-row .bal-now { color: var(--text-2); font-size: 13px; white-space: nowrap; }
+.acc-add { display: grid; grid-template-columns: 1.4fr 90px 1fr auto; gap: 8px; }
+.acc-add input, .acc-add select { padding: 7px 9px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); min-width: 0; }
+label.section { display: block; font-size: 12px; color: var(--text-2); margin-bottom: 6px; }
+@media (max-width: 520px) { .acc-add { grid-template-columns: 1fr 1fr; } }
+.code { font-family: ui-monospace, Menlo, monospace; background: var(--surface-2); padding: 2px 6px; border-radius: 6px; }
+
+@media (max-width: 860px) {
+  .hero, .charts { grid-template-columns: 1fr; }
+  .edit-grid { grid-template-columns: 1fr; }
+  .search { width: 100%; }
+}
+@media (max-width: 520px) {
+  .form { grid-template-columns: 1fr; }
+  .hide-sm { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<div class="tip" id="tip" hidden></div>
+
+<script>
+const SYM = { THB: '฿', MYR: 'RM', SGD: 'S$', USD: '$', EUR: '€', RUB: '₽', GBP: '£', JPY: '¥', INR: '₹', IDR: 'Rp', VND: '₫', PHP: '₱', KRW: '₩', AUD: 'A$' };
+const COMMON = ['USD', 'EUR', 'GBP', 'THB', 'MYR', 'SGD', 'IDR', 'VND', 'PHP', 'JPY', 'CNY', 'HKD', 'AUD', 'AED', 'INR', 'RUB', 'TRY', 'GEL', 'KZT'];
+const nf = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
+const nf0 = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
+const catName = n => n || '';
+const accName = a => a.name;
+
+function money(v, cur, round) {
+  v = v || 0;
+  const s = (round ? nf0 : nf).format(Math.abs(v));
+  const sym = SYM[cur] || cur;
+  const sign = v < 0 ? '−' : '';
+  return ['$', '€', '£', 'S$', '¥', '₹', '₱', '₩', 'A$', 'Rp'].includes(sym) ? `${sign}${sym}${s}` : `${sign}${s} ${sym}`;
+}
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const $ = (sel, root = document) => root.querySelector(sel);
+const today = () => new Date().toLocaleDateString('sv-SE');
+function monthName(m) {
+  const [y, mo] = m.split('-').map(Number);
+  const s = new Date(y, mo - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  return s;
+}
+function shortDate(d) {
+  const [y, m, day] = d.split('-').map(Number);
+  return new Date(y, m - 1, day).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+async function api(path, opts = {}) {
+  const r = await fetch(path, {
+    method: opts.method || (opts.body ? 'POST' : 'GET'),
+    headers: opts.body ? { 'Content-Type': 'application/json' } : {},
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || `Error ${r.status}`);
+  return data;
+}
+
+const state = {
+  month: today().slice(0, 7), summary: null, txs: [], settings: null,
+  filter: 'all', cat: null, q: '', draft: {},
+};
+document.addEventListener('input', e => { if (e.target.id?.startsWith('s-')) state.draft[e.target.id] = e.target.value; });
+
+// ---------- tooltip ----------
+const tip = $('#tip');
+function showTip(e, html) { tip.innerHTML = html; tip.hidden = false; tip.style.left = e.clientX + 'px'; tip.style.top = e.clientY + 'px'; }
+function hideTip() { tip.hidden = true; }
+
+// ---------- load ----------
+async function load() {
+  const [summary, txs, settings] = await Promise.all([
+    api('/api/summary?month=' + state.month),
+    api('/api/transactions?month=' + state.month),
+    api('/api/settings'),
+  ]);
+  Object.assign(state, { summary, txs, settings });
+  render();
+}
+
+function render() {
+  state.settings.setup_done ? renderMainOnly() : renderSetup();
+}
+
+function renderMainOnly() {
+  const app = $('#app');
+  const s = state.summary, st = state.settings;
+  const base = s.base_currency;
+  const bot = botStatus(st);
+  const mIdx = s.months.indexOf(state.month);
+
+  app.innerHTML = `
+    <div class="top">
+      <h1>🧾 Expenses</h1>
+      <div class="month">
+        <button title="Previous month" data-act="prev" ${mIdx >= s.months.length - 1 ? 'disabled' : ''}>‹</button>
+        <select data-act="month">${s.months.map(m => `<option value="${m}" ${m === state.month ? 'selected' : ''}>${monthName(m)}</option>`).join('')}</select>
+        <button title="Next month" data-act="next" ${mIdx <= 0 ? 'disabled' : ''}>›</button>
+      </div>
+      <span class="pill" title="${esc(bot.title)}"><span class="dot ${bot.cls}"></span>${esc(bot.text)}</span>
+      <div class="spacer"></div>
+      <button class="btn primary" data-act="income">+ Top up</button>
+      ${s.accounts.length > 1 ? `<button class="btn" data-act="transfer">⇄ Transfer</button>` : ''}
+      <button class="btn" data-act="expense">+ Expense</button>
+      <button class="btn ghost" data-act="settings" title="Settings">⚙︎</button>
+    </div>
+
+    <div class="grid hero">
+      <div class="card">
+        <div class="label">Left across all accounts</div>
+        <div class="big num">≈ ${money(s.total_base, base, true)}</div>
+        <div class="sub">at current rates, in ${base}</div>
+      </div>
+      <div class="card">
+        <div class="label">Spent in ${monthName(state.month).split(' ')[0]}</div>
+        <div class="mid num">≈ ${money(s.spent, base, true)}</div>
+        <div class="sub">${countOf('expense')} ${countOf('expense') === 1 ? 'expense' : 'expenses'}</div>
+      </div>
+      <div class="card">
+        <div class="label">Topped up this month</div>
+        <div class="mid num">${money(s.income, base, true)}</div>
+        <div class="sub">${s.income ? (s.income >= s.spent ? 'more than spent' : 'less than spent') : 'no top-ups'}</div>
+      </div>
+    </div>
+
+    <div class="grid accounts">
+      ${s.accounts.map(a => `
+        <div class="card acc">
+          <div class="head"><span class="flag">${a.flag}</span>${esc(accName(a))}</div>
+          <div class="bal num ${a.balance < 0 ? 'neg' : ''}">${money(a.balance, a.currency)}</div>
+          <div class="meta num">
+            <span>${a.currency !== base ? '≈ ' + money(a.balance_base, base, true) + ' · ' : ''}spent ${money(s.spent_by_account[a.id] || 0, a.currency, true)}</span>
+            <button data-act="reconcile" data-id="${a.id}" title="Enter the real balance from your bank">Reconcile</button>
+          </div>
+        </div>`).join('')}
+    </div>
+
+    <div class="grid charts">
+      <div class="card">
+        <h2>By category</h2>
+        <div class="cats">${renderCats()}</div>
+      </div>
+      <div class="card">
+        <h2>By day</h2>
+        <div class="daily" id="daily"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="tx-head">
+        <h2>Transactions${state.cat ? ' · ' + esc(catName(state.cat)) + ` <button class="chip" data-act="clearcat">✕</button>` : ''}</h2>
+        <div class="spacer"></div>
+        <div class="chips">
+          ${[['all', 'All'], ['expense', 'Expenses'], ['income', 'Top-ups'], ['transfer', 'Transfers']].map(([k, l]) =>
+            `<button class="chip ${state.filter === k ? 'on' : ''}" data-act="filter" data-f="${k}">${l}</button>`).join('')}
+        </div>
+        <input class="search" placeholder="Search…" value="${esc(state.q)}" data-act="search">
+      </div>
+      <div class="table-wrap">${renderTable()}</div>
+      <div class="foot">
+        <span>Rates updated: ${s.rates_updated ? new Date(s.rates_updated).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' }) : '—'}</span>
+        <span><a href="/api/export.csv?month=${state.month}">Download month as CSV</a> · <a href="/api/export.csv">all</a></span>
+      </div>
+    </div>`;
+  drawDaily();
+  const search = $('[data-act=search]');
+  search.addEventListener('input', e => { state.q = e.target.value; $('.table-wrap').innerHTML = renderTable(); });
+}
+
+function countOf(type) { return state.txs.filter(t => t.type === type).length; }
+function plural(n, one, few, many) {
+  const m10 = n % 10, m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return one;
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+  return many;
+}
+
+function botStatus(st) {
+  const b = st.bot;
+  if (!st.has_token) return { cls: 'bad', text: 'Bot not connected', title: 'Add the bot token in Settings' };
+  if (b.state === 'bad_token') return { cls: 'bad', text: 'Invalid bot token', title: b.error || '' };
+  if (b.state === 'error') return { cls: 'warn', text: 'Can’t reach Telegram', title: b.error || '' };
+  if (!st.owner) return { cls: 'warn', text: 'Bot not linked', title: 'Open Settings and link the bot' };
+  if (!st.has_key) return { cls: 'warn', text: 'No Claude key', title: 'Without a key the bot can’t read receipts' };
+  if (b.state === 'running') return { cls: 'ok', text: '@' + (st.bot_username || b.username || 'bot') + ' is running', title: 'Last message: ' + (b.last_update || '—') };
+  return { cls: '', text: 'Bot starting…', title: '' };
+}
+
+function renderCats() {
+  const cats = state.summary.by_category;
+  if (!cats.length) return `<div class="empty">No expenses this month yet.<br>Send a receipt to the bot in Telegram.</div>`;
+  const max = cats[0].total, total = state.summary.spent;
+  return cats.map(c => `
+    <button class="cat ${state.cat === c.name ? 'on' : ''}" data-act="cat" data-name="${esc(c.name)}"
+      data-tip="<b>${esc(c.emoji + ' ' + catName(c.name))}</b><br>${money(c.total, state.summary.base_currency)} · ${(c.total / total * 100).toFixed(1)}% · ${state.txs.filter(t => t.type === 'expense' && t.category === c.name).length} items">
+      <span class="name">${c.emoji} ${esc(catName(c.name))}</span>
+      <span class="track"><div class="bar" style="width:${Math.max(c.total / max * 100, 1)}%"></div></span>
+      <span class="val num">${money(c.total, state.summary.base_currency, true)}<span class="pct">${Math.round(c.total / total * 100)}%</span></span>
+    </button>`).join('');
+}
+
+function drawDaily() {
+  const el = $('#daily');
+  const [y, m] = state.month.split('-').map(Number);
+  const days = new Date(y, m, 0).getDate();
+  const data = state.summary.by_day;
+  const vals = Array.from({ length: days }, (_, i) => data[`${state.month}-${String(i + 1).padStart(2, '0')}`] || 0);
+  const max = Math.max(...vals);
+  if (!max) { el.innerHTML = `<div class="empty">No expenses this month.</div>`; return; }
+
+  const W = Math.max(el.clientWidth, 280), H = 220, L = 44, B = 22, T = 8;
+  const step = niceStep(max / 3), top = Math.ceil(max / step) * step;
+  const cw = (W - L) / days, bw = Math.max(Math.min(cw - 2, 18), 2);
+  const yv = v => T + (H - T - B) * (1 - v / top);
+  let g = '';
+  for (let v = 0; v <= top + 1e-9; v += step) {
+    g += `<line class="grid-line" x1="${L}" x2="${W}" y1="${yv(v)}" y2="${yv(v)}"/>
+          <text class="axis" x="${L - 6}" y="${yv(v) + 4}" text-anchor="end">${compact(v)}</text>`;
+  }
+  vals.forEach((v, i) => {
+    const x = L + i * cw + (cw - bw) / 2;
+    const d = i + 1;
+    if (d === 1 || d % 5 === 0) g += `<text class="axis" x="${x + bw / 2}" y="${H - 4}" text-anchor="middle">${d}</text>`;
+    if (!v) return;
+    const h = Math.max(H - B - yv(v), 2), r = Math.min(4, bw / 2, h);
+    const x0 = x, y0 = yv(v), x1 = x + bw, y1 = H - B;
+    const path = `M${x0},${y1}V${y0 + r}Q${x0},${y0} ${x0 + r},${y0}H${x1 - r}Q${x1},${y0} ${x1},${y0 + r}V${y1}Z`;
+    const dateStr = `${state.month}-${String(d).padStart(2, '0')}`;
+    g += `<g class="col" data-tip="<b>${shortDate(dateStr)}</b><br>${money(v, state.summary.base_currency)}" data-day="${dateStr}">
+            <rect class="hit" x="${L + i * cw}" y="${T}" width="${cw}" height="${H - T - B}"/>
+            <path class="b" d="${path}"/></g>`;
+  });
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Expenses by day">${g}</svg>`;
+}
+function niceStep(raw) {
+  const p = Math.pow(10, Math.floor(Math.log10(raw || 1)));
+  const n = raw / p;
+  return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * p;
+}
+function compact(v) { return v >= 1e6 ? (v / 1e6).toFixed(1).replace('.0', '') + 'M' : v >= 1000 ? (v / 1000).toFixed(v % 1000 ? 1 : 0).replace('.0', '') + 'k' : String(v); }
+
+function accById(id) { return state.summary.accounts.find(a => a.id === id) || { flag: '', name: id, currency: '' }; }
+function catEmoji(name) { return (state.summary.categories.find(c => c.name === name) || {}).emoji || '📦'; }
+
+function filteredTxs() {
+  const q = state.q.trim().toLowerCase();
+  return state.txs.filter(t =>
+    (state.filter === 'all' || t.type === state.filter || (state.filter === 'income' && t.type === 'adjust')) &&
+    (!state.cat || t.category === state.cat) &&
+    (!q || [t.description, t.merchant, t.category, catName(t.category), t.caption, ...(t.items || []).map(i => i.name)].join(' ').toLowerCase().includes(q)));
+}
+
+function renderTable() {
+  const rows = filteredTxs();
+  if (!rows.length) return `<div class="empty">${state.txs.length ? 'Nothing found.' : 'No transactions this month.'}</div>`;
+  return `<table><thead><tr><th>Date</th><th></th><th>What</th><th class="hide-sm">Category</th><th class="hide-sm">Account</th><th style="text-align:right">Amount</th></tr></thead><tbody>
+    ${rows.map(t => {
+      const acc = accById(t.account_id);
+      let desc, amt, cls = '', cat = '', thumb;
+      if (t.type === 'expense') {
+        desc = `${esc(t.description || t.merchant || 'Expense')}${t.merchant && t.description ? `<small>${esc(t.merchant)}</small>` : ''}`;
+        amt = `−${money(t.orig_amount, t.orig_currency)}${t.orig_currency !== state.summary.base_currency ? `<small>≈ ${money(t.base_amount, state.summary.base_currency, true)}</small>` : ''}`;
+        cat = `${catEmoji(t.category)} ${esc(catName(t.category))}`;
+        thumb = t.photo ? (t.photo.endsWith('.pdf') ? `<div class="thumb">📄</div>` : `<img class="thumb" loading="lazy" src="/receipts/${encodeURI(t.photo)}" alt="">`) : `<div class="thumb">✍️</div>`;
+      } else if (t.type === 'income') {
+        desc = esc(t.description || 'Top-up'); cls = 'in';
+        amt = `+${money(t.amount, acc.currency)}`; thumb = `<div class="thumb">💰</div>`;
+      } else if (t.type === 'transfer') {
+        const to = accById(t.to_account_id);
+        desc = `Transfer ${acc.flag} → ${to.flag}<small>${esc(t.description || `${accName(acc)} → ${accName(to)}`)}</small>`; cls = 'tr';
+        amt = `${money(t.amount, acc.currency)}<small>→ ${money(t.to_amount, to.currency)}</small>`; thumb = `<div class="thumb">🔁</div>`;
+      } else {
+        desc = esc(t.description || 'Balance reconciliation'); cls = t.amount >= 0 ? 'in' : '';
+        amt = (t.amount >= 0 ? '+' : '') + money(t.amount, acc.currency); thumb = `<div class="thumb">⚖️</div>`;
+      }
+      return `<tr class="row" data-act="edit" data-id="${t.id}">
+        <td class="date">${shortDate(t.date)}</td><td>${thumb}</td><td class="desc">${desc}</td>
+        <td class="tag hide-sm">${cat}</td><td class="tag hide-sm" title="${esc(accName(acc))}">${acc.flag}</td>
+        <td class="amt num ${cls}">${amt}</td></tr>`;
+    }).join('')}</tbody></table>`;
+}
+
+// ---------- modals ----------
+function modal(html, wide) {
+  closeModal();
+  const o = document.createElement('div');
+  o.className = 'overlay';
+  o.innerHTML = `<div class="modal ${wide ? 'wide' : ''}">${html}</div>`;
+  o.addEventListener('mousedown', e => { if (e.target === o) closeModal(); });
+  document.body.appendChild(o);
+  const first = o.querySelector('input:not([type=hidden]), select');
+  if (first) first.focus();
+  return o;
+}
+function closeModal() { document.querySelectorAll('.overlay').forEach(o => o.remove()); }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+const field = (label, inner, cls = '', hint = '') => `<div class="field ${cls}"><label>${label}</label>${inner}${hint ? `<div class="hint">${hint}</div>` : ''}</div>`;
+const accOptions = sel => state.summary.accounts.map(a => `<option value="${a.id}" ${a.id === sel ? 'selected' : ''}>${a.flag} ${esc(accName(a))} (${a.currency})</option>`).join('');
+const catOptions = sel => state.summary.categories.map(c => `<option value="${esc(c.name)}" ${c.name === sel ? 'selected' : ''}>${esc(catName(c.name))}</option>`).join('');
+const allCurrencies = () => [...new Set([...COMMON, ...(state.settings?.currencies || [])])];
+const curOptions = sel => [...new Set([sel, ...allCurrencies()].filter(Boolean))].map(c => `<option ${c === sel ? 'selected' : ''}>${c}</option>`).join('');
+
+function formData(o) {
+  const d = {};
+  o.querySelectorAll('[name]').forEach(i => d[i.name] = i.value.trim());
+  return d;
+}
+async function submit(o, fn) {
+  const err = o.querySelector('.err');
+  const btn = o.querySelector('[data-save]');
+  err.textContent = ''; btn.disabled = true;
+  try { await fn(formData(o)); closeModal(); await load(); }
+  catch (e) { err.textContent = e.message; btn.disabled = false; }
+}
+function wire(o, fn) {
+  o.querySelector('[data-save]').addEventListener('click', () => submit(o, fn));
+  o.querySelector('[data-cancel]')?.addEventListener('click', closeModal);
+  o.querySelectorAll('input').forEach(i => i.addEventListener('keydown', e => { if (e.key === 'Enter') submit(o, fn); }));
+}
+const buttons = (save = 'Save', extra = '') => `<div class="err"></div><div class="actions">${extra}<button class="btn" data-cancel>Cancel</button><button class="btn primary" data-save>${save}</button></div>`;
+
+function openIncome() {
+  const o = modal(`<h3>💰 Top up</h3><div class="form">
+    ${field('Amount', `<input name="amount" inputmode="decimal" placeholder="1000">`)}
+    ${field('To account', `<select name="account_id">${accOptions(state.settings.default_account)}</select>`)}
+    ${field('Date', `<input name="date" type="date" value="${today()}">`)}
+    ${field('Note', `<input name="description" placeholder="optional">`)}
+  </div>${buttons('Top up')}`);
+  wire(o, d => api('/api/income', { body: { ...d, currency: accById(d.account_id).currency } }));
+}
+
+function openTransfer() {
+  const o = modal(`<h3>⇄ Transfer between accounts</h3><div class="form">
+    ${field('From', `<select name="from">${accOptions(state.summary.accounts[0]?.id)}</select>`)}
+    ${field('To', `<select name="to">${accOptions(state.summary.accounts[1]?.id)}</select>`)}
+    ${field('Amount sent', `<input name="amount" inputmode="decimal" placeholder="20000">`, '', '<span id="fromCur"></span>')}
+    ${field('Amount received', `<input name="to_amount" inputmode="decimal" placeholder="at current rate">`, '', 'Leave empty to use the current rate')}
+    ${field('Date', `<input name="date" type="date" value="${today()}">`)}
+    ${field('Note', `<input name="description" placeholder="optional">`)}
+  </div>${buttons('Transfer')}`);
+  const upd = () => {
+    const f = accById($('[name=from]', o).value), t = accById($('[name=to]', o).value);
+    $('#fromCur', o).textContent = `in ${f.currency} → received in ${t.currency}`;
+  };
+  o.querySelectorAll('select').forEach(s => s.addEventListener('change', upd)); upd();
+  wire(o, d => api('/api/transfer', { body: d }));
+}
+
+function openExpense() {
+  const o = modal(`<h3>+ Add expense</h3><div class="form">
+    ${field('Amount', `<input name="amount" inputmode="decimal">`)}
+    ${field('Currency', `<select name="currency">${curOptions(state.summary.base_currency)}</select>`)}
+    ${field('Category', `<select name="category">${catOptions('Groceries')}</select>`)}
+    ${field('Account', `<select name="account_id"><option value="">by currency</option>${accOptions('')}</select>`)}
+    ${field('What you bought', `<input name="description">`, 'full')}
+    ${field('Date', `<input name="date" type="date" value="${today()}">`)}
+    ${field('Shop', `<input name="merchant" placeholder="optional">`)}
+  </div>${buttons('Add')}`);
+  wire(o, d => api('/api/expense', { body: d }));
+}
+
+function openReconcile(id) {
+  const a = accById(id);
+  const o = modal(`<h3>${a.flag} Reconcile balance</h3>
+    <p style="color:var(--text-2);margin-top:-6px">The tracker shows <b class="num">${money(a.balance, a.currency)}</b>. Enter what your bank actually shows — the difference is saved as a separate “Balance reconciliation” line (fees, exchange differences, forgotten expenses).</p>
+    <div class="form">${field(`Actual balance, ${a.currency}`, `<input name="balance" inputmode="decimal" value="${a.balance}">`, 'full')}</div>
+    ${buttons('Reconcile')}`);
+  wire(o, d => api('/api/balance', { body: { account_id: id, balance: d.balance } }));
+}
+
+function openEdit(id) {
+  const t = state.txs.find(x => x.id === id);
+  if (!t) return;
+  const acc = accById(t.account_id);
+  let form, title;
+  if (t.type === 'expense') {
+    title = 'Expense';
+    form = `${field('Receipt amount', `<input name="orig_amount" inputmode="decimal" value="${t.orig_amount}">`)}
+      ${field('Currency', `<select name="orig_currency">${curOptions(t.orig_currency)}</select>`)}
+      ${field('Category', `<select name="category">${catOptions(t.category)}</select>`)}
+      ${field('Account', `<select name="account_id">${accOptions(t.account_id)}</select>`, '', t.orig_currency !== acc.currency ? `Charged ≈ ${money(t.amount, acc.currency)}` : '')}
+      ${field('What you bought', `<input name="description" value="${esc(t.description)}">`, 'full')}
+      ${field('Shop', `<input name="merchant" value="${esc(t.merchant)}">`)}
+      ${field('Date', `<input name="date" type="date" value="${t.date}">`)}`;
+  } else if (t.type === 'income') {
+    title = 'Top-up';
+    form = `${field('Amount', `<input name="orig_amount" inputmode="decimal" value="${t.orig_amount}">`)}
+      ${field('Date', `<input name="date" type="date" value="${t.date}">`)}
+      ${field('Note', `<input name="description" value="${esc(t.description)}">`, 'full')}`;
+  } else if (t.type === 'transfer') {
+    title = 'Transfer';
+    form = `${field('From', `<select name="account_id">${accOptions(t.account_id)}</select>`)}
+      ${field('To', `<select name="to_account_id">${accOptions(t.to_account_id)}</select>`)}
+      ${field('Sent', `<input name="orig_amount" inputmode="decimal" value="${t.amount}">`)}
+      ${field('Received', `<input name="to_amount" inputmode="decimal" value="${t.to_amount}">`)}
+      ${field('Date', `<input name="date" type="date" value="${t.date}">`)}
+      ${field('Note', `<input name="description" value="${esc(t.description)}">`)}`;
+  } else {
+    title = 'Balance reconciliation';
+    form = `${field('Amount', `<input value="${money(t.amount, acc.currency)}" disabled>`)}
+      ${field('Date', `<input name="date" type="date" value="${t.date}">`)}
+      ${field('Note', `<input name="description" value="${esc(t.description)}">`, 'full')}`;
+  }
+  const hasPhoto = t.photo;
+  const receipt = hasPhoto ? `<div class="receipt">${t.photo.endsWith('.pdf')
+      ? `<a class="btn" href="/receipts/${encodeURI(t.photo)}" target="_blank">📄 Open PDF</a>`
+      : `<a href="/receipts/${encodeURI(t.photo)}" target="_blank"><img src="/receipts/${encodeURI(t.photo)}" alt="Receipt"></a>`}
+      ${t.caption ? `<div class="hint">Caption: “${esc(t.caption)}”</div>` : ''}
+      ${t.items?.length ? `<div class="items">${t.items.map(i => `<div><span>${esc(i.name)}</span><span class="num">${nf.format(i.price)}</span></div>`).join('')}</div>` : ''}
+    </div>` : '';
+  const o = modal(`<h3>${title}</h3>
+    <div class="${hasPhoto ? 'edit-grid' : ''}">${receipt}<div class="form">${form}</div></div>
+    ${buttons('Save', `<button class="btn danger left" data-del>Delete</button>`)}`, hasPhoto);
+  o.querySelector('[data-del]').addEventListener('click', async () => {
+    if (!confirm('Delete this transaction?')) return;
+    await api('/api/tx/' + id, { method: 'DELETE' });
+    closeModal(); load();
+  });
+  wire(o, d => api('/api/tx/' + id, { body: d }));
+}
+
+function openSettings() {
+  const st = state.settings;
+  const link = st.bot_username ? `https://t.me/${st.bot_username}?start=${st.pair_code}` : null;
+  const o = modal(`<h3>⚙︎ Settings</h3>
+    <div class="form">
+      ${field('Telegram bot token', `<input name="telegram_token" placeholder="${st.has_token ? 'saved — paste a new one to replace it' : '123456:ABC…'}">`, 'full')}
+      ${field('Claude API key', `<input name="anthropic_key" placeholder="${st.has_key ? 'saved ' + esc(st.key_hint) + ' — paste a new one to replace it' : 'sk-ant-…'}">`, 'full')}
+      <div class="full"><label class="section">Accounts</label>${accountsEditor()}</div>
+      <div class="full field"><label>Telegram link</label>
+        ${st.owner ? `Bot is linked to <b>${esc(st.owner)}</b>. <button class="btn ghost" data-unlink>Unlink</button>`
+          : link ? `Bot is not linked yet. <a class="big-link" href="${link}" target="_blank">Open the bot and press Start</a>` : 'Save the token first.'}
+      </div>
+    </div>${buttons()}`);
+  o.querySelector('[data-unlink]')?.addEventListener('click', async () => {
+    if (!confirm('Unlink the bot? It will stop accepting receipts until you link it again.')) return;
+    state.settings = await api('/api/unlink', { body: {} }); closeModal(); render();
+  });
+  wire(o, d => api('/api/settings', { body: d }));
+}
+
+// ---------- accounts editor (setup wizard + settings) ----------
+function accountsEditor() {
+  const st = state.settings;
+  const bal = Object.fromEntries(state.summary.accounts.map(a => [a.id, a.balance]));
+  const d = state.draft;
+  return `<div class="acc-editor">
+    <div class="field"><label>Currency for totals and charts</label>
+      <select id="acc-base">${st.base_currency ? '' : '<option value="">Choose…</option>'}${curOptions(st.base_currency)}</select></div>
+    <div class="acc-list">${st.accounts.map(a => `
+      <div class="acc-row">
+        <span class="flag">${a.flag}</span>
+        <input data-acc-name="${esc(a.id)}" value="${esc(a.name)}" aria-label="Account name">
+        <span class="cur">${a.currency}</span>
+        <span class="num bal-now">${money(bal[a.id] || 0, a.currency)}</span>
+        <button class="btn ghost" data-acc-del="${esc(a.id)}" title="Delete account">✕</button>
+      </div>`).join('') || '<div class="hint">No accounts yet — add your first one below.</div>'}</div>
+    <div class="acc-add">
+      <input id="s-acc-name" placeholder="Name, e.g. Revolut" value="${esc(d['s-acc-name'] || '')}">
+      <select id="s-acc-cur">${curOptions(d['s-acc-cur'] || st.base_currency || 'USD')}</select>
+      <input id="s-acc-bal" inputmode="decimal" placeholder="Balance now" value="${esc(d['s-acc-bal'] || '')}">
+      <button class="btn" data-acc-add>Add</button>
+    </div>
+    ${st.accounts.length > 1 ? `<div class="field"><label>Top-ups go to</label><select id="acc-default">${accOptions(st.default_account)}</select></div>` : ''}
+    <div class="err" id="acc-err"></div>
+  </div>`;
+}
+
+async function accountAction(fn) {
+  const err = $('#acc-err');
+  if (err) err.textContent = '';
+  try {
+    await fn();
+    const inSettings = !!document.querySelector('.overlay .acc-editor');
+    await load();
+    if (inSettings) openSettings();
+  } catch (e) { const el = $('#acc-err'); if (el) el.textContent = e.message; }
+}
+
+document.addEventListener('click', e => {
+  if (e.target.closest('[data-acc-add]')) {
+    accountAction(async () => {
+      await api('/api/accounts', { body: { name: $('#s-acc-name').value, currency: $('#s-acc-cur').value, balance: $('#s-acc-bal').value } });
+      ['s-acc-name', 's-acc-cur', 's-acc-bal'].forEach(k => delete state.draft[k]);
+    });
+  }
+  const del = e.target.closest('[data-acc-del]');
+  if (del && confirm('Delete this account?')) {
+    accountAction(() => api('/api/accounts/' + del.dataset.accDel, { method: 'DELETE' }));
+  }
+});
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (t.id === 's-acc-cur') state.draft['s-acc-cur'] = t.value;
+  if (t.id === 'acc-base' && t.value) accountAction(() => api('/api/settings', { body: { base_currency: t.value } }));
+  if (t.id === 'acc-default') accountAction(() => api('/api/settings', { body: { default_account: t.value } }));
+  if (t.dataset.accName !== undefined) accountAction(() => api('/api/accounts/' + t.dataset.accName, { body: { name: t.value } }));
+});
+
+// ---------- setup wizard ----------
+function renderSetup() {
+  const st = state.settings;
+  const link = st.bot_username ? `https://t.me/${st.bot_username}?start=${st.pair_code}` : null;
+  const accs = state.summary.accounts;
+  $('#app').innerHTML = `<div class="setup">
+    <h1>🧾 Expense tracker</h1>
+    <p class="lead">Four steps, then you can send receipts in Telegram.</p>
+
+    <div class="card step ${st.has_token ? 'done' : ''}"><div class="n">${st.has_token ? '✓' : 1}</div><div>
+      <h3>Create a Telegram bot</h3>
+      ${st.has_token ? `<div class="hint">Bot <b>@${esc(st.bot_username || '')}</b> is connected.</div>` : `
+      <ol><li>In Telegram, open <a href="https://t.me/BotFather" target="_blank">@BotFather</a> and send <span class="code">/newbot</span></li>
+      <li>Pick a name and a username for the bot (it must end in <span class="code">bot</span>)</li>
+      <li>BotFather sends a token like <span class="code">123456:ABC-DEF…</span> — paste it here</li></ol>
+      <div class="row-in field"><input id="s-token" placeholder="Token from BotFather"><button class="btn primary" data-setup="token">Save</button></div>`}
+    </div></div>
+
+    <div class="card step ${st.has_key ? 'done' : ''}"><div class="n">${st.has_key ? '✓' : 2}</div><div>
+      <h3>Claude key — so the bot can read receipts</h3>
+      ${st.has_key ? `<div class="hint">Key saved (${esc(st.key_hint)}).</div>` : `
+      <ol><li>Go to <a href="https://console.anthropic.com/settings/keys" target="_blank">console.anthropic.com → API Keys</a></li>
+      <li>Click <b>Create Key</b> and copy the key (it starts with <span class="code">sk-ant-</span>)</li>
+      <li>Add credit under Billing — one receipt costs about 1–2 cents</li></ol>
+      <div class="row-in field"><input id="s-key" placeholder="sk-ant-…"><button class="btn primary" data-setup="key">Save</button></div>`}
+    </div></div>
+
+    <div class="card step ${st.accounts.length && st.base_currency ? 'done' : ''}"><div class="n">${st.accounts.length && st.base_currency ? '✓' : 3}</div><div>
+      <h3>Your accounts</h3>
+      <div class="hint" style="margin-bottom:10px">Add each bank account or card you spend from, with its currency and how much is on it now. Expenses are taken from the account in the same currency.</div>
+      ${accountsEditor()}
+    </div></div>
+
+    <div class="card step ${st.owner ? 'done' : ''}"><div class="n">${st.owner ? '✓' : 4}</div><div>
+      <h3>Link the bot to yourself</h3>
+      ${st.owner ? `<div class="hint">Linked to <b>${esc(st.owner)}</b>. The bot ignores messages from anyone else.</div>`
+        : link ? `<div class="hint">Click the button to open Telegram, then press <b>Start</b>. This page will notice the link on its own.</div>
+          <a class="big-link" href="${link}" target="_blank">Open @${esc(st.bot_username)}</a>`
+        : `<div class="hint">Available after step 1.</div>`}
+    </div></div>
+
+    <div class="err" id="s-err"></div>
+    <div class="actions"><button class="btn primary" data-setup="finish" ${st.has_token && st.has_key && st.owner && st.accounts.length && st.base_currency ? '' : 'disabled'}>Done — open the tracker</button></div>
+  </div>`;
+}
+
+async function setupAction(kind) {
+  const err = $('#s-err'); err.textContent = '';
+  try {
+    if (kind === 'token') state.settings = await api('/api/settings', { body: { telegram_token: $('#s-token').value } });
+    if (kind === 'key') state.settings = await api('/api/settings', { body: { anthropic_key: $('#s-key').value } });
+    if (kind === 'finish') {
+      state.settings = await api('/api/settings', { body: { finish: true } });
+    }
+    await load();
+  } catch (e) { err.textContent = e.message; }
+}
+
+// ---------- events ----------
+document.addEventListener('click', e => {
+  const s = e.target.closest('[data-setup]');
+  if (s) return setupAction(s.dataset.setup);
+  const el = e.target.closest('[data-act]');
+  if (!el) return;
+  const act = el.dataset.act;
+  const months = state.summary.months, i = months.indexOf(state.month);
+  if (act === 'prev' && i < months.length - 1) { state.month = months[i + 1]; state.cat = null; load(); }
+  if (act === 'next' && i > 0) { state.month = months[i - 1]; state.cat = null; load(); }
+  if (act === 'income') openIncome();
+  if (act === 'transfer') openTransfer();
+  if (act === 'expense') openExpense();
+  if (act === 'settings') openSettings();
+  if (act === 'reconcile') openReconcile(el.dataset.id);
+  if (act === 'edit') openEdit(Number(el.dataset.id));
+  if (act === 'filter') { state.filter = el.dataset.f; renderMainOnly(); }
+  if (act === 'cat') { state.cat = state.cat === el.dataset.name ? null : el.dataset.name; state.filter = 'all'; renderMainOnly(); }
+  if (act === 'clearcat') { state.cat = null; renderMainOnly(); }
+});
+document.addEventListener('change', e => {
+  if (e.target.dataset.act === 'month') { state.month = e.target.value; state.cat = null; load(); }
+});
+document.addEventListener('mousemove', e => {
+  const t = e.target.closest('[data-tip]');
+  t ? showTip(e, t.dataset.tip) : hideTip();
+});
+window.addEventListener('resize', () => state.summary && state.settings.setup_done && drawDaily());
+
+// live refresh: new receipts from Telegram show up on their own
+setInterval(async () => {
+  if (document.querySelector('.overlay') || document.activeElement?.matches('input')) return;
+  try {
+    const sig = o => JSON.stringify([o.summary, o.txs, { ...o.settings, bot: { ...o.settings.bot, last_update: 0 } }]);
+    const before = sig(state);
+    const [summary, txs, settings] = await Promise.all([
+      api('/api/summary?month=' + state.month), api('/api/transactions?month=' + state.month), api('/api/settings')]);
+    Object.assign(state, { summary, txs, settings });
+    if (sig(state) !== before) render();
+  } catch { /* server restarting */ }
+}, 5000);
+
+load().catch(e => { $('#app').innerHTML = `<div class="empty">Couldn’t load data: ${esc(e.message)}</div>`; });
+</script>
+</body>
+</html>
