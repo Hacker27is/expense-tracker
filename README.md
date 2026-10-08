@@ -43,6 +43,13 @@ Expenses are taken from the account in the same currency. Expenses in a currency
 accounts hold go to the default account, converted at the current rate
 ([open.er-api.com](https://open.er-api.com), refreshed every 6 hours).
 
+## Sharing with other people
+
+Several people can record into one shared budget. In **Settings → People** click
+**+ Invite someone** and send the one-time link to that person; they press **Start** in
+Telegram and they're in. Entries show who made them, the dashboard gets a **By person**
+breakdown, and everyone sees the same balances.
+
 ## Update
 
 Run the install command again. Your data is kept.
