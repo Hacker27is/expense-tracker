@@ -152,7 +152,7 @@ def _attachment(msg):
 
 # ---------- handlers ----------
 
-def process(chat_id, user_msg_id, text, photo_rel, replace_tx=None, status_msg_id=None, sent=None):
+def process(chat_id, user_msg_id, text, photo_rel, replace_tx=None, status_msg_id=None, sent=None, member_id=None):
     """Parse with Claude, record, and show the result. Runs in the worker pool.
     `sent` is the YYYY-MM-DD the owner sent the message."""
     if status_msg_id is None:
@@ -165,7 +165,8 @@ def process(chat_id, user_msg_id, text, photo_rel, replace_tx=None, status_msg_i
         if not parsed.get("date") and sent:
             parsed["date"] = sent
         tx_id = ledger.apply_parsed(parsed, photo=photo_rel, caption=text or None,
-                                    tg_chat_id=chat_id, tg_message_id=user_msg_id)
+                                    tg_chat_id=chat_id, tg_message_id=user_msg_id,
+                                    member_id=member_id or chat_id)
         if replace_tx and db.get_tx(replace_tx):
             db.delete_tx(replace_tx)
         tx = db.get_tx(tx_id)
@@ -191,23 +192,30 @@ def _submit(*args, **kw):
 def handle_message(msg):
     chat_id = msg["chat"]["id"]
     text = (msg.get("text") or msg.get("caption") or "").strip()
-    owner = db.get_setting("owner_chat_id")
+    owner = db.owner_chat_id()
+    who = msg["chat"].get("first_name") or msg["chat"].get("username") or "Someone"
     sent = datetime.fromtimestamp(msg.get("date") or time.time()).strftime("%Y-%m-%d")
 
     if text.startswith("/start"):
         code = text.split(maxsplit=1)[1].strip() if " " in text else ""
-        if owner and str(chat_id) == owner:
+        if db.is_member(chat_id):
             send(chat_id, "I'm here 👌\n\n" + HELP)
-        elif not owner and code and code == db.get_setting("pair_code"):
-            db.set_setting("owner_chat_id", chat_id)
-            db.set_setting("owner_name", msg["chat"].get("first_name") or msg["chat"].get("username") or "")
+        elif owner is None and code and code == db.get_setting("pair_code"):
+            db.add_member(chat_id, who, is_owner=True)
+            db.set_setting("owner_chat_id", chat_id)      # kept for older dashboards
+            db.set_setting("owner_name", who)
             send(chat_id, "Done — the bot is now linked to you ✅\n\n" + HELP)
+        elif code and db.use_invite(code, chat_id):
+            db.add_member(chat_id, who)
+            send(chat_id, f"You're in, {html.escape(who)} ✅\nYour expenses go into the shared budget.\n\n" + HELP)
+            if owner:
+                send(owner, f"👋 <b>{html.escape(who)}</b> joined the expense tracker.")
         else:
-            send(chat_id, "This is a private bot. To link it, open the link from the dashboard on the computer.")
+            send(chat_id, "This is a private bot. Ask its owner for an invite link.")
         return
 
-    if not owner or str(chat_id) != owner:
-        return  # чужие сообщения молча игнорируем
+    if not db.is_member(chat_id):
+        return  # messages from anyone else are ignored
 
     cmd = text.split("@")[0].lower() if text.startswith("/") else ""
     if cmd == "/help" or text.lower() in ("помощь", "help"):
@@ -217,7 +225,7 @@ def handle_message(msg):
     elif cmd == "/month" or text.lower() in ("месяц", "расходы", "month", "expenses"):
         send(chat_id, ledger.month_text())
     elif cmd == "/undo":
-        tx = db.last_tx()
+        tx = db.last_tx(member_id=chat_id)
         if not tx:
             send(chat_id, "No entries yet.")
         else:
@@ -235,7 +243,8 @@ def handle_message(msg):
             combined = f"{base}\nOwner's correction: {text}".strip()
             orig_sent = datetime.fromtimestamp(reply.get("date") or time.time()).strftime("%Y-%m-%d")
             _submit(chat_id, msg["message_id"], combined, link["photo"],
-                    replace_tx=link["tx_id"], status_msg_id=reply["message_id"], sent=orig_sent)
+                    replace_tx=link["tx_id"], status_msg_id=reply["message_id"], sent=orig_sent,
+                    member_id=(db.get_tx(link["tx_id"]) or {}).get("member_id") or chat_id)
         elif att:
             try:
                 rel = download(*att)
@@ -252,7 +261,7 @@ def handle_message(msg):
 def handle_callback(cq):
     chat_id = cq["message"]["chat"]["id"]
     msg_id = cq["message"]["message_id"]
-    if str(chat_id) != db.get_setting("owner_chat_id"):
+    if not db.is_member(chat_id):
         return api("answerCallbackQuery", callback_query_id=cq["id"])
     action, _, rest = cq.get("data", "").partition(":")
     parts = rest.split(":")

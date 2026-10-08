@@ -88,7 +88,7 @@ a { color: var(--series-1); }
 .acc .bal.neg { color: var(--bad); }
 .acc .meta { color: var(--muted); font-size: 12px; display: flex; justify-content: space-between; gap: 8px; }
 .acc .meta button { border: 0; background: none; color: var(--series-1); padding: 0; font-size: 12px; }
-.charts { grid-template-columns: 1fr 1fr; margin-bottom: 14px; }
+.charts { grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); margin-bottom: 14px; }
 
 /* category bars */
 .cats { display: flex; flex-direction: column; gap: 2px; }
@@ -175,12 +175,15 @@ tr.row:hover td { background: var(--surface-2); }
 .acc-row .bal-now { color: var(--text-2); font-size: 13px; white-space: nowrap; }
 .acc-add { display: grid; grid-template-columns: 1.4fr 90px 1fr auto; gap: 8px; }
 .acc-add input, .acc-add select { padding: 7px 9px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); min-width: 0; }
+.acc-row.person { grid-template-columns: 26px 1fr auto auto; }
+.invite { display: flex; gap: 8px; margin-top: 8px; }
+.invite input { flex: 1; min-width: 0; padding: 7px 9px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); font-size: 12px; }
 label.section { display: block; font-size: 12px; color: var(--text-2); margin-bottom: 6px; }
 @media (max-width: 520px) { .acc-add { grid-template-columns: 1fr 1fr; } }
 .code { font-family: ui-monospace, Menlo, monospace; background: var(--surface-2); padding: 2px 6px; border-radius: 6px; }
 
 @media (max-width: 860px) {
-  .hero, .charts { grid-template-columns: 1fr; }
+  .hero { grid-template-columns: 1fr; }
   .edit-grid { grid-template-columns: 1fr; }
   .search { width: 100%; }
 }
@@ -235,7 +238,7 @@ async function api(path, opts = {}) {
 
 const state = {
   month: today().slice(0, 7), summary: null, txs: [], settings: null,
-  filter: 'all', cat: null, q: '', draft: {},
+  filter: 'all', cat: null, person: null, q: '', draft: {},
 };
 document.addEventListener('input', e => { if (e.target.id?.startsWith('s-')) state.draft[e.target.id] = e.target.value; });
 
@@ -321,11 +324,15 @@ function renderMainOnly() {
         <h2>By day</h2>
         <div class="daily" id="daily"></div>
       </div>
+      ${s.people.length > 1 ? `<div class="card">
+        <h2>By person</h2>
+        <div class="cats">${renderPeople()}</div>
+      </div>` : ''}
     </div>
 
     <div class="card">
       <div class="tx-head">
-        <h2>Transactions${state.cat ? ' · ' + esc(catName(state.cat)) + ` <button class="chip" data-act="clearcat">✕</button>` : ''}</h2>
+        <h2>Transactions${state.cat ? ' · ' + esc(catName(state.cat)) + ` <button class="chip" data-act="clearcat">✕</button>` : ''}${state.person ? ' · ' + esc(personName(state.person)) + ` <button class="chip" data-act="clearperson">✕</button>` : ''}</h2>
         <div class="spacer"></div>
         <div class="chips">
           ${[['all', 'All'], ['expense', 'Expenses'], ['income', 'Top-ups'], ['transfer', 'Transfers']].map(([k, l]) =>
@@ -373,6 +380,21 @@ function renderCats() {
       <span class="name">${c.emoji} ${esc(catName(c.name))}</span>
       <span class="track"><div class="bar" style="width:${Math.max(c.total / max * 100, 1)}%"></div></span>
       <span class="val num">${money(c.total, state.summary.base_currency, true)}<span class="pct">${Math.round(c.total / total * 100)}%</span></span>
+    </button>`).join('');
+}
+
+function personName(id) { return (state.summary.people.find(p => p.chat_id === id) || {}).name || '—'; }
+
+function renderPeople() {
+  const people = state.summary.people;
+  const max = Math.max(...people.map(p => p.spent), 1);
+  const total = state.summary.spent;
+  return people.map(p => `
+    <button class="cat ${state.person === p.chat_id ? 'on' : ''}" data-act="person" data-id="${p.chat_id}"
+      data-tip="<b>${esc(p.name)}</b><br>${money(p.spent, state.summary.base_currency)} · ${p.tx_count} entries in total">
+      <span class="name">${p.is_owner ? '👑' : '👤'} ${esc(p.name)}</span>
+      <span class="track"><div class="bar" style="width:${Math.max(p.spent / max * 100, 1)}%"></div></span>
+      <span class="val num">${money(p.spent, state.summary.base_currency, true)}<span class="pct">${total ? Math.round(p.spent / total * 100) : 0}%</span></span>
     </button>`).join('');
 }
 
@@ -424,13 +446,15 @@ function filteredTxs() {
   return state.txs.filter(t =>
     (state.filter === 'all' || t.type === state.filter || (state.filter === 'income' && t.type === 'adjust')) &&
     (!state.cat || t.category === state.cat) &&
+    (!state.person || t.member_id === state.person) &&
     (!q || [t.description, t.merchant, t.category, catName(t.category), t.caption, ...(t.items || []).map(i => i.name)].join(' ').toLowerCase().includes(q)));
 }
 
 function renderTable() {
   const rows = filteredTxs();
+  const multi = state.summary.people.length > 1;
   if (!rows.length) return `<div class="empty">${state.txs.length ? 'Nothing found.' : 'No transactions this month.'}</div>`;
-  return `<table><thead><tr><th>Date</th><th></th><th>What</th><th class="hide-sm">Category</th><th class="hide-sm">Account</th><th style="text-align:right">Amount</th></tr></thead><tbody>
+  return `<table><thead><tr><th>Date</th><th></th><th>What</th><th class="hide-sm">Category</th>${multi ? '<th class="hide-sm">Who</th>' : ''}<th class="hide-sm">Account</th><th style="text-align:right">Amount</th></tr></thead><tbody>
     ${rows.map(t => {
       const acc = accById(t.account_id);
       let desc, amt, cls = '', cat = '', thumb;
@@ -452,7 +476,7 @@ function renderTable() {
       }
       return `<tr class="row" data-act="edit" data-id="${t.id}">
         <td class="date">${shortDate(t.date)}</td><td>${thumb}</td><td class="desc">${desc}</td>
-        <td class="tag hide-sm">${cat}</td><td class="tag hide-sm" title="${esc(accName(acc))}">${acc.flag}</td>
+        <td class="tag hide-sm">${cat}</td>${multi ? `<td class="tag hide-sm">${esc(t.member_name || '—')}</td>` : ''}<td class="tag hide-sm" title="${esc(accName(acc))}">${acc.flag}</td>
         <td class="amt num ${cls}">${amt}</td></tr>`;
     }).join('')}</tbody></table>`;
 }
@@ -605,6 +629,7 @@ function openSettings() {
       ${field('Telegram bot token', `<input name="telegram_token" placeholder="${st.has_token ? 'saved — paste a new one to replace it' : '123456:ABC…'}">`, 'full')}
       ${field('Claude API key', `<input name="anthropic_key" placeholder="${st.has_key ? 'saved ' + esc(st.key_hint) + ' — paste a new one to replace it' : 'sk-ant-…'}">`, 'full')}
       <div class="full"><label class="section">Accounts</label>${accountsEditor()}</div>
+      <div class="full"><label class="section">People</label>${peopleEditor()}</div>
       <div class="full field"><label>Telegram link</label>
         ${st.owner ? `Bot is linked to <b>${esc(st.owner)}</b>. <button class="btn ghost" data-unlink>Unlink</button>`
           : link ? `Bot is not linked yet. <a class="big-link" href="${link}" target="_blank">Open the bot and press Start</a>` : 'Save the token first.'}
@@ -616,6 +641,46 @@ function openSettings() {
   });
   wire(o, d => api('/api/settings', { body: d }));
 }
+
+// ---------- people (shared budget) ----------
+function peopleEditor() {
+  const members = state.settings.members || [];
+  return `<div class="acc-editor">
+    <div class="acc-list">${members.map(m => `
+      <div class="acc-row person">
+        <span class="flag">${m.is_owner ? '👑' : '👤'}</span>
+        <span>${esc(m.name)}${m.is_owner ? ' <span class="cur">(you)</span>' : ''}</span>
+        <span class="cur">${m.tx_count} entries</span>
+        ${m.is_owner ? '<span></span>' : `<button class="btn ghost" data-person-del="${m.chat_id}" title="Remove">✕</button>`}
+      </div>`).join('')}</div>
+    <div class="hint">Everyone you invite records into the same shared budget and can see it in the bot.</div>
+    <button class="btn" data-invite>+ Invite someone</button>
+    <div id="invite-box"></div>
+    <div class="err" id="people-err"></div>
+  </div>`;
+}
+
+document.addEventListener('click', async e => {
+  if (e.target.closest('[data-invite]')) {
+    const err = $('#people-err'); err.textContent = '';
+    try {
+      const { link } = await api('/api/invite', { body: {} });
+      $('#invite-box').innerHTML = `<div class="invite"><input value="${esc(link)}" readonly onclick="this.select()">
+        <button class="btn" data-copy="${esc(link)}">Copy</button></div>
+        <div class="hint">Send this link to one person. They open it, press Start, and they're in. The link works once.</div>`;
+    } catch (e2) { err.textContent = e2.message; }
+  }
+  const copy = e.target.closest('[data-copy]');
+  if (copy) {
+    navigator.clipboard?.writeText(copy.dataset.copy);
+    copy.textContent = 'Copied';
+    setTimeout(() => { copy.textContent = 'Copy'; }, 1500);
+  }
+  const del = e.target.closest('[data-person-del]');
+  if (del && confirm('Remove this person? Their past records stay in the tracker.')) {
+    accountAction(() => api('/api/members/' + del.dataset.personDel, { method: 'DELETE' }));
+  }
+});
 
 // ---------- accounts editor (setup wizard + settings) ----------
 function accountsEditor() {
@@ -752,6 +817,8 @@ document.addEventListener('click', e => {
   if (act === 'filter') { state.filter = el.dataset.f; renderMainOnly(); }
   if (act === 'cat') { state.cat = state.cat === el.dataset.name ? null : el.dataset.name; state.filter = 'all'; renderMainOnly(); }
   if (act === 'clearcat') { state.cat = null; renderMainOnly(); }
+  if (act === 'person') { const id = Number(el.dataset.id); state.person = state.person === id ? null : id; renderMainOnly(); }
+  if (act === 'clearperson') { state.person = null; renderMainOnly(); }
 });
 document.addEventListener('change', e => {
   if (e.target.dataset.act === 'month') { state.month = e.target.value; state.cat = null; load(); }

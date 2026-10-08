@@ -88,6 +88,12 @@ def init():
             CREATE INDEX IF NOT EXISTS tx_date ON transactions(date);
             CREATE TABLE IF NOT EXISTS rates (
                 currency TEXT PRIMARY KEY, per_usd REAL, updated_at TEXT);
+            -- everyone allowed to send receipts to the bot
+            CREATE TABLE IF NOT EXISTS members (
+                chat_id INTEGER PRIMARY KEY, name TEXT, is_owner INTEGER DEFAULT 0, added_at TEXT);
+            -- one-time invite codes handed out from the dashboard
+            CREATE TABLE IF NOT EXISTS invites (
+                code TEXT PRIMARY KEY, created_at TEXT, used_by INTEGER, used_at TEXT);
             -- which bot message belongs to which transaction (for reply corrections)
             CREATE TABLE IF NOT EXISTS tg_links (
                 chat_id INTEGER, bot_message_id INTEGER, tx_id INTEGER,
@@ -95,6 +101,16 @@ def init():
                 PRIMARY KEY (chat_id, bot_message_id));
             """
         )
+        cols = {r[1] for r in c.execute("PRAGMA table_info(transactions)")}
+        if "member_id" not in cols:
+            c.execute("ALTER TABLE transactions ADD COLUMN member_id INTEGER")
+        # single-owner installs: the owner becomes the first member, and their records get their name
+        owner = c.execute("SELECT value FROM settings WHERE key='owner_chat_id'").fetchone()
+        if owner and not c.execute("SELECT 1 FROM members").fetchone():
+            name = c.execute("SELECT value FROM settings WHERE key='owner_name'").fetchone()
+            c.execute("INSERT INTO members(chat_id,name,is_owner,added_at) VALUES(?,?,1,?)",
+                      (int(owner[0]), (name[0] if name else None) or "Me", datetime.now().isoformat(timespec="seconds")))
+            c.execute("UPDATE transactions SET member_id=? WHERE member_id IS NULL", (int(owner[0]),))
         for old, new in _OLD_CATEGORIES.items():
             c.execute("UPDATE transactions SET category=? WHERE category=?", (new, old))
         # installs from before accounts were configurable had base THB and top-ups on "thai"
@@ -211,7 +227,7 @@ def balances():
 TX_FIELDS = [
     "type", "date", "account_id", "amount", "orig_amount", "orig_currency",
     "to_account_id", "to_amount", "base_amount", "category", "merchant",
-    "description", "items", "photo", "caption", "tg_chat_id", "tg_message_id",
+    "description", "items", "photo", "caption", "tg_chat_id", "tg_message_id", "member_id",
 ]
 
 
@@ -249,24 +265,39 @@ def delete_tx(tx_id):
         c.execute("DELETE FROM transactions WHERE id=?", (tx_id,))
 
 
+_TX_SELECT = ("SELECT t.*, m.name AS member_name FROM transactions t "
+              "LEFT JOIN members m ON m.chat_id = t.member_id")
+
+
 def get_tx(tx_id):
     with connect() as c:
-        r = c.execute("SELECT * FROM transactions WHERE id=?", (tx_id,)).fetchone()
+        r = c.execute(f"{_TX_SELECT} WHERE t.id=?", (tx_id,)).fetchone()
     return _row(r) if r else None
 
 
-def last_tx():
+def last_tx(member_id=None):
+    q = f"{_TX_SELECT} ORDER BY t.id DESC LIMIT 1"
+    args = []
+    if member_id:
+        q = f"{_TX_SELECT} WHERE t.member_id=? ORDER BY t.id DESC LIMIT 1"
+        args = [member_id]
     with connect() as c:
-        r = c.execute("SELECT * FROM transactions ORDER BY id DESC LIMIT 1").fetchone()
+        r = c.execute(q, args).fetchone()
     return _row(r) if r else None
 
 
-def list_tx(month=None):
-    q, args = "SELECT * FROM transactions", []
+def list_tx(month=None, member_id=None):
+    q, args = _TX_SELECT, []
+    where = []
     if month:
-        q += " WHERE substr(date,1,7)=?"
+        where.append("substr(t.date,1,7)=?")
         args.append(month)
-    q += " ORDER BY date DESC, id DESC"
+    if member_id:
+        where.append("t.member_id=?")
+        args.append(member_id)
+    if where:
+        q += " WHERE " + " AND ".join(where)
+    q += " ORDER BY t.date DESC, t.id DESC"
     with connect() as c:
         return [_row(r) for r in c.execute(q, args)]
 
@@ -284,6 +315,58 @@ def _row(r):
     except ValueError:
         d["items"] = []
     return d
+
+
+# ---------- members & invites ----------
+
+def members():
+    with connect() as c:
+        rows = c.execute(
+            "SELECT m.*, (SELECT COUNT(*) FROM transactions t WHERE t.member_id = m.chat_id) AS tx_count "
+            "FROM members m ORDER BY m.is_owner DESC, m.added_at").fetchall()
+    return [dict(r) for r in rows]
+
+
+def is_member(chat_id):
+    with connect() as c:
+        return bool(c.execute("SELECT 1 FROM members WHERE chat_id=?", (int(chat_id),)).fetchone())
+
+
+def owner_chat_id():
+    with connect() as c:
+        r = c.execute("SELECT chat_id FROM members WHERE is_owner=1").fetchone()
+    return r[0] if r else None
+
+
+def add_member(chat_id, name, is_owner=False):
+    with _lock, connect() as c:
+        c.execute("INSERT OR IGNORE INTO members(chat_id,name,is_owner,added_at) VALUES(?,?,?,?)",
+                  (int(chat_id), name or "Someone", 1 if is_owner else 0,
+                   datetime.now().isoformat(timespec="seconds")))
+
+
+def remove_member(chat_id):
+    with _lock, connect() as c:
+        c.execute("DELETE FROM members WHERE chat_id=? AND is_owner=0", (int(chat_id),))
+
+
+def add_invite(code):
+    with _lock, connect() as c:
+        c.execute("INSERT OR REPLACE INTO invites(code,created_at,used_by,used_at) VALUES(?,?,NULL,NULL)",
+                  (code, datetime.now().isoformat(timespec="seconds")))
+
+
+def use_invite(code, chat_id):
+    """Claim an unused invite code. True if it was valid and is now spent."""
+    with _lock, connect() as c:
+        cur = c.execute("UPDATE invites SET used_by=?, used_at=? WHERE code=? AND used_by IS NULL",
+                        (int(chat_id), datetime.now().isoformat(timespec="seconds"), code))
+        return cur.rowcount > 0
+
+
+def open_invites():
+    with connect() as c:
+        return [dict(r) for r in c.execute("SELECT * FROM invites WHERE used_by IS NULL ORDER BY created_at DESC")]
 
 
 # ---------- telegram message links ----------

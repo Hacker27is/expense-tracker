@@ -6,6 +6,7 @@ import logging
 import mimetypes
 import os
 import re
+import secrets
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -35,7 +36,8 @@ def settings_payload():
         "key_hint": f"…{key[-4:]}" if key else None,
         "bot": dict(bot.status),
         "bot_username": db.get_setting("bot_username"),
-        "owner": db.get_setting("owner_name") if db.get_setting("owner_chat_id") else None,
+        "owner": next((m["name"] for m in db.members() if m["is_owner"]), None),
+        "members": db.members(),
         "pair_code": bot.pairing_code(),
         "setup_done": db.get_setting("setup_done") == "1",
         "accounts": db.accounts(),
@@ -129,7 +131,18 @@ class Handler(BaseHTTPRequestHandler):
             data = self._json()
             if url.path == "/api/settings":
                 return self._send(200, self._save_settings(data))
+            if url.path == "/api/invite":
+                code = secrets.token_urlsafe(9)
+                db.add_invite(code)
+                username = db.get_setting("bot_username")
+                if not username:
+                    raise ledger.LedgerError("Save the bot token first.")
+                return self._send(200, {"code": code, "link": f"https://t.me/{username}?start={code}"})
             if url.path == "/api/unlink":
+                for m in db.members():
+                    db.remove_member(m["chat_id"])
+                with db.connect() as c:
+                    c.execute("DELETE FROM members")
                 db.set_setting("owner_chat_id", None)
                 db.set_setting("owner_name", None)
                 db.set_setting("pair_code", None)
@@ -194,6 +207,12 @@ class Handler(BaseHTTPRequestHandler):
         if not self._same_origin():
             return self._send(403, {"error": "forbidden"})
         path = urlparse(self.path).path
+        m = re.fullmatch(r"/api/members/(\d+)", path)
+        if m:
+            if int(m.group(1)) == db.owner_chat_id():
+                return self._send(400, {"error": "This is the owner — use Unlink to reset the bot."})
+            db.remove_member(int(m.group(1)))
+            return self._send(200, settings_payload())
         m = re.fullmatch(r"/api/accounts/([\w-]+)", path)
         if m:
             if db.account_in_use(m.group(1)):

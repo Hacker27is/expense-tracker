@@ -227,6 +227,7 @@ def summary(month=None):
     by_cat = defaultdict(float)
     by_day = defaultdict(float)
     by_acc = defaultdict(float)
+    by_member = defaultdict(float)
     for t in txs:
         if t["type"] == "expense":
             v = t["base_amount"] or 0
@@ -234,6 +235,7 @@ def summary(month=None):
             by_cat[t["category"] or db.OTHER] += v
             by_day[t["date"]] += v
             by_acc[t["account_id"]] += t["amount"]
+            by_member[t["member_id"]] += v
         elif t["type"] == "income":
             income += t["base_amount"] or 0
 
@@ -251,6 +253,10 @@ def summary(month=None):
         "by_category": cats,
         "by_day": {k: round(v, 2) for k, v in sorted(by_day.items())},
         "spent_by_account": {k: round(v, 2) for k, v in by_acc.items()},
+        "people": sorted(
+            ({**m, "spent": round(by_member.get(m["chat_id"], 0), 2)} for m in db.members()),
+            key=lambda m: -m["spent"],
+        ),
         "months": sorted(set(db.months()) | {date.today().strftime("%Y-%m")}, reverse=True),
         "rates_updated": rates.updated_at(),
         "categories": [{"name": n, "emoji": e} for n, e in db.CATEGORIES],
@@ -287,6 +293,8 @@ def describe(tx):
         lines = [f"⚖️ Reconciliation: {fmt(tx['amount'], acc['currency'])} on {acc['flag']} {acc['name']}"]
     if tx["date"] != date.today().isoformat():
         lines.append(f"📅 {datetime.strptime(tx['date'], '%Y-%m-%d').strftime('%d %b %Y')}")
+    if tx.get("member_name") and len(db.members()) > 1:
+        lines.append(f"👤 {e(tx['member_name'])}")
     bal = db.balances()
     lines.append(f"Balance {acc['flag']}: {fmt(bal[acc['id']], acc['currency'])}")
     return "\n".join(lines)
